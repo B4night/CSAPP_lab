@@ -636,13 +636,13 @@ fprintf (FILE *__restrict __stream, const char *__restrict __fmt, ...)
   401255:	e8 76 f9 ff ff       	call   400bd0 <strtol@plt>
   40125a:	48 89 c3             	mov    %rax,%rbx
   40125d:	8d 40 ff             	lea    -0x1(%rax),%eax
-  401260:	3d e8 03 00 00       	cmp    $0x3e8,%eax
+  401260:	3d e8 03 00 00       	cmp    $0x3e8,%eax		#  输入的数字要小于0x3e8+1=0x3e9
   401265:	76 05                	jbe    40126c <secret_phase+0x2a>
   401267:	e8 ce 01 00 00       	call   40143a <explode_bomb>
-  40126c:	89 de                	mov    %ebx,%esi
-  40126e:	bf f0 30 60 00       	mov    $0x6030f0,%edi
+  40126c:	89 de                	mov    %ebx,%esi		# R[esi]=R[ebx]=输入的数字
+  40126e:	bf f0 30 60 00       	mov    $0x6030f0,%edi	# R[edi]=0x6030f0
   401273:	e8 8c ff ff ff       	call   401204 <fun7>
-  401278:	83 f8 02             	cmp    $0x2,%eax
+  401278:	83 f8 02             	cmp    $0x2,%eax		# fun7的返回值需要为0x2
   40127b:	74 05                	je     401282 <secret_phase+0x40>
   40127d:	e8 b8 01 00 00       	call   40143a <explode_bomb>
   401282:	bf 38 24 40 00       	mov    $0x402438,%edi
@@ -904,6 +904,8 @@ fprintf (FILE *__restrict __stream, const char *__restrict __fmt, ...)
   4015d1:	48 89 44 24 68       	mov    %rax,0x68(%rsp)
   4015d6:	31 c0                	xor    %eax,%eax
   4015d8:	83 3d 81 21 20 00 06 	cmpl   $0x6,0x202181(%rip)        # 603760 <num_input_strings>
+  # rip的值为当前指令的地址. 0x202181+此指令的地址
+
   4015df:	75 5e                	jne    40163f <phase_defused+0x7b>
   4015e1:	4c 8d 44 24 10       	lea    0x10(%rsp),%r8
   4015e6:	48 8d 4c 24 0c       	lea    0xc(%rsp),%rcx
