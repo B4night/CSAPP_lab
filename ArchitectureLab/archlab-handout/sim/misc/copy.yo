@@ -1,0 +1,56 @@
+                            | # B4night
+                            | # 1/18/2023
+0x000:                      |     .pos 0
+0x000: 30f40008000000000000 |     irmovq stack, %rsp      # initialize stack
+0x00a: 804400000000000000   |     call main
+0x013: 00                   |     halt
+                            | 
+                            | # Source block 
+0x014:                      | src:
+0x014: 0a00000000000000     |     .quad 0x00a
+0x01c: b000000000000000     |     .quad 0x0b0
+0x024: 000c000000000000     |     .quad 0xc00
+                            | 
+                            | # Destination block 
+0x02c:                      | dest:
+0x02c: 1101000000000000     |     .quad 0x111 
+0x034: 2202000000000000     |     .quad 0x222 
+0x03c: 3303000000000000     |     .quad 0x333
+                            |     
+                            |     
+0x044:                      | main:
+0x044: 30f71400000000000000 |     irmovq src, %rdi   # transfer argument
+0x04e: 30f62c00000000000000 |     irmovq dest, %rsi
+0x058: 30f20300000000000000 |     irmovq $3, %rdx
+                            | 
+0x062: 806c00000000000000   |     call copy_block
+0x06b: 90                   |     ret
+                            | 
+0x06c:                      | copy_block:
+0x06c: a08f                 |     pushq %r8       # 保存被调用者保存寄存器
+0x06e: a09f                 |     pushq %r9
+0x070: a0af                 |     pushq %r10
+                            | 
+0x072: 6300                 |     xorq %rax, %rax
+0x074: 6222                 |     andq %rdx, %rdx
+0x076: 30f80800000000000000 |     irmovq $8, %r8
+0x080: 30fa0100000000000000 |     irmovq $1, %r10
+0x08a: 70b100000000000000   |     jmp test
+0x093:                      | loop:
+0x093: 50970000000000000000 |     mrmovq (%rdi), %r9
+0x09d: 6087                 |     addq %r8, %rdi
+0x09f: 40960000000000000000 |     rmmovq %r9, (%rsi)
+0x0a9: 6086                 |     addq %r8, %rsi
+0x0ab: 6390                 |     xorq %r9, %rax
+0x0ad: 61a2                 |     subq %r10, %rdx
+0x0af: 6222                 |     andq %rdx, %rdx
+0x0b1:                      | test:
+0x0b1: 749300000000000000   |     jne loop
+                            | 
+0x0ba: b0af                 |     popq %r10
+0x0bc: b09f                 |     popq %r9
+0x0be: b08f                 |     popq %r8
+0x0c0: 90                   |     ret
+                            | 
+0x800:                      |     .pos 0x800
+0x800:                      | stack:

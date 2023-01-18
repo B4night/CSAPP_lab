@@ -1,0 +1,56 @@
+# B4night
+# 1/18/2023
+    .pos 0
+    irmovq stack, %rsp      # initialize stack
+    call main
+    halt
+
+# Source block 
+src:
+    .quad 0x00a
+    .quad 0x0b0
+    .quad 0xc00
+
+# Destination block 
+dest:
+    .quad 0x111 
+    .quad 0x222 
+    .quad 0x333
+    
+
+main:
+    irmovq src, %rdi   # transfer argument
+    irmovq dest, %rsi
+    irmovq $3, %rdx
+
+    call copy_block
+    ret
+
+copy_block:
+    pushq %r8       # 保存被调用者保存寄存器
+    pushq %r9
+    pushq %r10
+
+    xorq %rax, %rax
+    andq %rdx, %rdx
+    irmovq $8, %r8
+    irmovq $1, %r10 # 赋值一些参数
+    jmp test
+loop:
+    mrmovq (%rdi), %r9      # val = *src
+    addq %r8, %rdi          # src++;
+    rmmovq %r9, (%rsi)      # *dest = val
+    addq %r8, %rsi          # dest++
+    xorq %r9, %rax          # result ^= val
+    subq %r10, %rdx         # len--
+    andq %rdx, %rdx         # set CC
+test:
+    jne loop
+
+    popq %r10
+    popq %r9
+    popq %r8
+    ret
+
+    .pos 0x800
+stack:
