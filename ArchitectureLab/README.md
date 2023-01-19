@@ -79,3 +79,127 @@ bool need_regids =
 ```
 
 如果最后输出`ISA Check Succeeds`则说明没问题
+
+
+
+# Part C
+
+本部分参考了[知乎专栏](https://zhuanlan.zhihu.com/p/454779772)
+
+本部分需要实现一个拷贝长度为n的数组的功能, 未优化过的代码如下
+
+``` C++
+word_t ncopy(word_t *src, word_t *dst, word_t len)
+{
+    word_t count = 0;
+    word_t val;
+
+    while (len > 0) {
+        val = *src++;
+        *dst++ = val;
+        if (val > 0)
+            count++;
+        len--;
+    }
+    return count;
+}
+```
+
+可以看到, 每复制一个数组元素有一次`len>0`和`val>0`的判断
+
+判断跳转对流水线有着很大的性能影响, 可以使用循环展开来减少判断的次数
+
+``` C++
+typedef int word_t;
+word_t ncopy2(word_t *src, word_t *dst, word_t len)
+{
+    word_t count = 0;
+    word_t val1;
+    word_t val2;
+
+    while (len > 1) {	// 一次赋值两个
+        val1 = *src++;
+        val2 = *src++;
+        *dst++ = val1;
+        *dst++ = val2;
+        if (val1 > 0)
+            count++;
+        if (val2 > 0)
+            count++;
+        len-=2;
+    }
+    while (len>0){		// 边界条件
+        val1 = *src;
+        *dst = val1;
+        if (val>0)
+        	count++;
+        len--;
+    }
+    return count;
+}
+```
+
+并且可以优化一下, 使用`IADDQ`来直接进行立即数和寄存器之间的加法, 减少指令的个数
+
+
+
+我使用了4x1的循环展开, 对应C代码如下
+
+``` C++
+typedef int word_t;
+word_t ncopy4(word_t *src, word_t *dst, word_t len)
+{
+    word_t count = 0;
+    word_t val1;
+    word_t val2;
+    word_t val3;
+    word_t val4;
+
+    while (len > 3) {	// 一次赋值4个
+        val1 = *src++;
+        val2 = *src++;
+        val3 = *src++;
+        val4 = *src++;
+        *dst++ = val1;
+        *dst++ = val2;
+        *dst++ = val3;
+        *dst++ = val4;
+        
+        if (val1 > 0)
+            count++;
+        if (val2 > 0)
+            count++;
+        if (val3 > 0)
+            count++;
+        if (val4 > 0)
+            count++;
+        len -= 4;
+    }
+    while (len>0){		// 边界条件,最多执行三次
+        val1 = *src;
+        *dst = val1;
+        if (val1>0)
+        	count++;
+        len--;
+    }
+    return count;
+}
+```
+
+**有个BUG没有解决, 挖个坑先, 以后有空再回来**
+
+
+
+# Appendix
+
+## 循环展开
+
+以下资料来自[维基百科](https://zh.m.wikipedia.org/zh-hans/%E5%BE%AA%E7%8E%AF%E5%B1%95%E5%BC%80)
+
+**循环展开**（Loop unwinding或loop unrolling），是一种牺牲程序的大小来加快程序执行速度的优化方法。可以由程序员完成，也可由[编译器](https://zh.m.wikipedia.org/wiki/编译器)自动优化完成。
+
+循环展开最常用来降低循环开销，为具有多个功能单元的处理器提供[指令级并行](https://zh.m.wikipedia.org/wiki/指令级并行)。也有利于[指令流水线](https://zh.m.wikipedia.org/wiki/指令流水线)的调度。
+
+![image-20230119152617574](https://joplin-imgbed-1312299157.cos.ap-nanjing.myqcloud.com/image-20230119152617574.png)
+
+循环展开可以减少分支预测失败的次数

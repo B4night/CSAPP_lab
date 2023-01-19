@@ -17,7 +17,7 @@ StartFun:
 # Return the number of positive words (>0) contained in src.
 #
 # Include your name and ID here.
-#
+# B4night
 # Describe how and why you modified the baseline code.
 #
 ##################################################################
@@ -32,20 +32,69 @@ ncopy:
 	xorq %rax,%rax		# count = 0;
 	andq %rdx,%rdx		# len <= 0?
 	jle Done		# if so, goto Done:
+	irmovq $3, %r8
+	irmovq $1, %r13	# 用于loop1的subq
+	irmovq $4, %r14	# 用于loop4的subq
+	pushq %rdx
+	subq %r8, %rdx	# set CC
+	popq %rdx
+	jle	loop1		# len <= 3
 
-Loop:	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	andq %r10, %r10		# val <= 0?
-	jle Npos		# if so, goto Npos:
-	irmovq $1, %r10
-	addq %r10, %rax		# count++
-Npos:	irmovq $1, %r10
-	subq %r10, %rdx		# len--
-	irmovq $8, %r10
-	addq %r10, %rdi		# src++
-	addq %r10, %rsi		# dst++
-	andq %rdx,%rdx		# len > 0?
-	jg Loop			# if so, goto Loop:
+loop4:
+	mrmovq (%rdi), %r9
+	iaddq $8, %rdi
+	mrmovq (%rdi), %r10
+	iaddq $8, %rdi
+	mrmovq (%rdi), %r11
+	iaddq $8, %rdi
+	mrmovq (%rdi), %r12
+	iaddq $8, %rdi
+	rmmovq %r9, (%rsi)
+	iaddq $8, %rsi
+	rmmovq %r10, (%rsi)
+	iaddq $8, %rsi
+	rmmovq %r11, (%rsi)
+	iaddq $8, %rsi
+	rmmovq %r12, (%rsi)
+	iaddq $8, %rsi
+	
+	andq %r9, %r9
+	jle loop4_no_count_val1		# <= 0
+	iaddq $1, %rax
+loop4_no_count_val1:
+	andq %r10, %r10
+	jle loop4_no_count_val2
+	iaddq $1, %rax
+loop4_no_count_val2:
+	andq %r11, %r11
+	jle loop4_no_count_val3
+	iaddq $1, %rax
+loop4_no_count_val3:
+	andq %r12, %r12
+	jle loop4_no_count_val4
+	iaddq $1, %rax
+loop4_no_count_val4:
+	subq %r14, %rdx			# len <= 4
+	pushq %rdx				# 比较len和3的大小
+	subq %r8, %rdx
+	popq %rdx
+	jle loop1_end	# len<=3,转到loop1执行
+	jmp loop4
+
+loop1:
+	mrmovq (%rdi), %r9
+	iaddq $8, %rdi
+	rmmovq %r9, (%rsi)
+	iaddq $8, %rsi
+	andq %r9, %r9
+	jle loop1_no_count
+	iaddq $1, %rax
+loop1_no_count:
+	subq %r13, %rdx
+loop1_end:
+	andq %rdx, %rdx
+	jg loop1
+
 ##################################################################
 # Do not modify the following section of code
 # Function epilogue.
@@ -62,10 +111,10 @@ EndFun:
 ###############################
 	.align 8
 src:
-	.quad -1
-	.quad -2
-	.quad 3
-	.quad 4
+	.quad 1
+	.quad 2
+	.quad -3
+	.quad -4
 	.quad 0xbcdefa # This shouldn't get moved
 
 	.align 16
