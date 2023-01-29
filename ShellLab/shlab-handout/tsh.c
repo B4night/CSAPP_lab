@@ -2,7 +2,6 @@
  * tsh - A tiny shell program with job control
  * 
  * <Put your name and login ID here>
- * B4night 1/20/2023
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -166,6 +165,43 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
+    char *argv[MAXARGS];
+    char buf[MAXLINE];
+    int bg;
+    pid_t pid;
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv);
+    if(argv[0] == NULL) {
+        return;
+    }
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &mask, NULL);        // block signal SIGCHLD
+    if(!builtin_cmd(argv)){
+        if((pid = fork()) == 0){    // child process
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);
+            setpgid(0, 0);          // set child process group id equals child process id
+            // child process's group only has child process itself
+            if(execve(argv[0], argv, environ) < 0){ // execute argv[0], if executes successfully it won't return
+                // if error comes out, execute the below code
+                printf("%s:Command not found.\n", argv[0]);
+                exit(0);
+            }
+        }
+
+        // below is father process
+        if(!bg){    // foreground
+            addjob(jobs, pid, FG, cmdline);
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);  // unblock SIGCHLD
+            waitfg(pid);
+        }
+        else{
+            addjob(jobs, pid, BG, cmdline);
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);  // unblock SIGCHLD
+            printf("[%d] (%d) %s", pid2jid(pid), pid, cmdline);
+        }
+    }
     return;
 }
 
@@ -232,6 +268,25 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    // return 1 when it's build in command
+    if (!strcmp(argv[0], "quit")) {
+    	exit(0);    // if it's quit, exit immediately
+    }
+    else if (!strcmp(argv[0], "jobs"))
+    {
+    	listjobs(jobs);
+    	return 1;
+    }
+    else if (!strcmp(argv[0], "bg") || !strcmp(argv[0], "fg"))
+    {
+    	do_bgfg(argv);  // bg or fg
+    	return 1;
+    }
+    // if it's &, do nothing
+    else if (!strcmp(argv[0], "&"))
+    {
+    	return 1;
+    }
     return 0;     /* not a builtin command */
 }
 
@@ -240,6 +295,55 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
+    // require arguments
+    if (argv[1] == NULL)
+    {
+    	printf("%s command requires PID or %%jobid argument\n", argv[0]);
+    	return;
+    }
+    
+    struct job_t* job;
+    int id;
+
+    // %5 means jid 5
+    // 5  means pid 5
+    if (sscanf(argv[1], "%%%d", &id) > 0)   // format scan jid
+    {
+    	job = getjobjid(jobs, id);
+    	if (job == NULL)
+    	{
+    		printf("%%%d: No such job\n", id);
+    		return ;
+    	}
+    } else if (sscanf(argv[1], "%d", &id) > 0) { // pid
+    	job = getjobpid(jobs, id);
+    	if (job == NULL) {
+    		printf("(%d): No such process\n", id);
+    		return ;
+    	}
+    } else {
+    	printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+        return;
+    }
+    
+    if(!strcmp(argv[0], "bg"))
+    {
+        // continue executing process whose group id is (job->pid)
+        // every process group only contains one process
+        // pid equals group id
+        // execute at background
+    	kill(-(job->pid), SIGCONT);
+    	job->state = BG;
+    	printf("[%d] (%d) %s",job->jid, job->pid, job->cmdline);
+    }
+    else
+    {
+        // execute at foreground
+    	kill(-(job->pid), SIGCONT);
+    	job->state = FG;
+    	waitfg(job->pid);
+    }
+
     return;
 }
 
@@ -248,6 +352,11 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    sigset_t mask_temp;
+    sigemptyset(&mask_temp);
+    while (fgpid(jobs) > 0) {       // return value > 0 means foreground process is still running
+    	sigsuspend(&mask_temp);     // sigsuspend will return after receiving SIGCHLD which means child process ends
+    }
     return;
 }
 
@@ -264,9 +373,41 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+    int olderrno = errno;   // store former errno
+    pid_t pid;
+    int status;
+    sigset_t mask_all, prev; 
+    
+    sigfillset(&mask_all);  // block all signals
+    while((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0)
+    {
+        // WNOHANG | WUNTRACED returns immediately
+    	if (WIFEXITED(status))  // exit successfully
+    	{
+    		sigprocmask(SIG_BLOCK, &mask_all, &prev);
+    		deletejob(jobs, pid);
+    		sigprocmask(SIG_SETMASK, &prev, NULL);
+    	}
+    	else if (WIFSIGNALED(status))  // signaled exit
+    	{
+    	    struct job_t* job = getjobpid(jobs, pid);
+            sigprocmask(SIG_BLOCK, &mask_all, &prev);
+            printf("Job [%d] (%d) terminated by signal %d\n", job->jid, job->pid, WTERMSIG(status));
+            deletejob(jobs, pid);
+            sigprocmask(SIG_SETMASK, &prev, NULL);
+    	}
+    	else  // child process stopped by signal
+    	{
+            struct job_t* job = getjobpid(jobs, pid);
+            sigprocmask(SIG_BLOCK, &mask_all, &prev);
+            printf("Job [%d] (%d) stopped by signal %d\n", job->jid, job->pid, WSTOPSIG(status));
+            job->state= ST;
+            sigprocmask(SIG_SETMASK, &prev, NULL);
+        }
+    }
+    errno = olderrno;  
     return;
 }
-
 /* 
  * sigint_handler - The kernel sends a SIGINT to the shell whenver the
  *    user types ctrl-c at the keyboard.  Catch it and send it along
@@ -274,9 +415,15 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
-    return;
+   	int olderrno = errno;
+   	pid_t pid = fgpid(jobs);    
+   	if (pid != 0) {     // send SIGINT to pid
+            kill(-pid, sig);
+    }
+   	errno = olderrno;
+   	
+   	return;
 }
-
 /*
  * sigtstp_handler - The kernel sends a SIGTSTP to the shell whenever
  *     the user types ctrl-z at the keyboard. Catch it and suspend the
@@ -284,6 +431,12 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+    int olderrno = errno;
+    pid_t pid = fgpid(jobs);
+    if (pid != 0) {     // send SIGTSTP to pid
+    	kill(-pid, sig);
+    }
+    errno = olderrno;
     return;
 }
 
